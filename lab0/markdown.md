@@ -6,10 +6,11 @@
     }
 ```
 
-- 我永远喜欢胡桃
+- 我永远喜欢胡桃  
+
 ![hutao](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/hutao.jpg)
 
-- 公式 
+- 公式  
 $$
     \nabla \times E = - \frac{\partial B}{\partial t}  \tag{1}
 $$
