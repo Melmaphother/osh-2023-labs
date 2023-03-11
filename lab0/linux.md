@@ -10,3 +10,8 @@
 - 查看内存总量        grep MemTotal /prok/meminfo
 - 查看剩余内存总量    grep MemFree  /prok/meminfo
 - 查看所有磁盘分区    fdisk -l
+
+### 设备截图
+![截图1](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/%E8%AE%BE%E5%A4%87%E4%BF%A1%E6%81%AF1.png)
+![截图2](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/%E8%AE%BE%E5%A4%87%E4%BF%A1%E6%81%AF2.png)
+![截图3](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/%E8%AE%BE%E5%A4%87%E4%BF%A1%E6%81%AF3.png)
