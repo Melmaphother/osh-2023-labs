@@ -6,28 +6,6 @@
     }
 ```
 
-<<<<<<< HEAD
-- 我永远喜欢胡桃
-  ![hutao](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/hutao.jpg)
-
-- 公式 
-  
-  $$
-  \nabla \times E = - \frac{\partial B}{\partial t}  \tag{1}
-  $$
-  
-  $$
-  \nabla \times H = J + \frac{\partial D}{\partial t}   \tag{2}
-  $$
-  
-  $$
-  \nabla \cdot D = \rho  \tag{3}
-  $$
-  
-  $$
-  \nabla \cdot B = 0   \tag{4}
-  $$
-=======
 - 我永远喜欢胡桃  
 
 ![hutao](https://github.com/Melmaphother/OSH-2023-labs/blob/main/lab0/src/hutao.jpg)
@@ -46,4 +24,3 @@ $$
     \nabla \cdot B = 0   \tag{4}
 $$
 
->>>>>>> c911ec792f76f2488fa83fd497898ef23722757d
