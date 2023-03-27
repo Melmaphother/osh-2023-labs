@@ -54,7 +54,7 @@
   
   会导致初始内存盘直接跳出进程导致创建失败，后续进程找不到父进程，最终导致**kernel panic**
   
-  ![](https://github.com/Melmaphother/osh-2023-labs/blob/main/lab1/pic/qemu%E6%B5%8B%E8%AF%951.png)
+  ![](https://github.com/Melmaphother/osh-2023-labs/blob/main/lab1/pic/%E6%9C%80%E7%BB%88%E8%BE%93%E5%87%BA%E5%AD%97%E7%AC%A6%E4%B8%B2.png)
 
 ### 三、添加自定义系统调用
 
