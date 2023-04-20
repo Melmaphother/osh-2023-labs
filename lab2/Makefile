@@ -1,4 +1,4 @@
-TARGET_EXEC := final_program
+TARGET_EXEC := shell
 
 BUILD_DIR := ./build
 SRC_DIRS := ./src
