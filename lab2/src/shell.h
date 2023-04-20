@@ -49,3 +49,4 @@ int			ExeExternalCmd(std::vector<std::string> &args);
 int		   *ExeCommandWithReDir(std::vector<std::string> &args);
 int			ExeSingleCommand(std::vector<std::string> &args, int *fd);
 std::vector<std::string> split(std::string s, const std::string &delimiter);
+std::string trim(std::string cmd);

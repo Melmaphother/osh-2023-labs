@@ -37,6 +37,7 @@ int main() {
 		if (cmd.empty()) continue;
 
 		// 有可处理命令
+		cmd = trim(cmd); // 去除两边的空格
 
 		// 首先判断输入指令是否在重命名表中，在则将化名改为原名
 		if (alias_list.find(cmd) != alias_list.end()) { cmd = alias_list[cmd]; }
@@ -124,13 +125,18 @@ int main() {
 		pid_t p_gid, c_pid, p_grp;
 		if (pid == 0) {
 			setpgid(pid, pid);
-			p_gid = getpgid(getpid());
-			c_pid = getpid();
-			p_grp = getpgrp();
+			p_gid	= getpgid(getpid());
+			c_pid	= getpid();
+			p_grp	= getpgrp();
 			int ret = ExePipe(cmd, cmd_history, alias_list);
-			if (ret == 0) exit(0);
+
+			if (ret == 0)
+				exit(0);
+			else {
+				std::cout << "error command" << std::endl;
+				exit(0);
+			}
 		} else {
-			// std::cout << pid << std::endl;
 			setpgid(pid, pid);
 			p_gid = getpgid(getpid());
 			c_pid = getpid();
@@ -152,6 +158,8 @@ int main() {
 }
 
 /*
+以下是上下键切换历史记录的代码，因为过于冗杂而且跟处理ctrl+c有冲突，就忍痛放弃了。
+等暑假有时间了再补（可能不补了。。。）
 				struct termios old_tio, new_tio;
 				int			   command_point = cmd_history.size() - 1;
 				// 获取终端属性并备份
@@ -166,9 +174,6 @@ int main() {
 				std::string input;
 				while (true) {
 					c = getchar();
-					// td::cout << '\n' << input.empty() << std::endl;
-					//  std::cout << command_point << std::endl;
-					//  std::cout << cmd_history[command_point] << std::endl;
 					if (c == '\n') { // 换行号停止
 						std::cout << "\n";
 						break;
@@ -182,9 +187,7 @@ int main() {
 							continue;
 						}
 					} else if (c == '\003') {
-						// std::cout << cmd;
 						cmd.clear();
-						// std::cout << cmd;
 						std::cout << '\n';
 						PrintPrompt();
 					}
@@ -215,10 +218,9 @@ int main() {
 										 ++i) {
 										std::cout << "\b";
 									}
-									// std::cout << cmd_history[command_point +
-		   1]; std::cout << cmd_history[command_point]; cmd =
-		   cmd_history[command_point]; input.clear(); input =
-		   cmd_history[command_point]; command_point--; } else {
+									std::cout << cmd_history[command_point];
+									cmd = cmd_history[command_point];
+input.clear(); input = cmd_history[command_point]; command_point--; } else {
 									// 第一次上键，要输出最近的命令
 									command_point--;
 									std::cout << cmd_history[command_point + 1];
@@ -278,7 +280,6 @@ int main() {
 						cmd += c;
 						input.push_back(c);
 					}
-					// std::cout << input << std::endl;
 				}
 
 				// 恢复终端属性

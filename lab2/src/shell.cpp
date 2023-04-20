@@ -19,8 +19,8 @@ int ctrl_d_handler() {
 	}
 }
 /**
- * @brief
- *
+ * @brief print "username:path: # "
+ * @return void
  */
 void PrintPrompt() {
 	uid_t		   uid = geteuid();
@@ -100,12 +100,14 @@ std::string ExeSpecialCmd(std::string			   &cmd,
 }
 
 /**
- * @brief
+ * @brief handle pipes
  *
  * @param cmd
  * @param cmd_history
  * @param alias_list
  * @return int
+ * @return 0 if success
+ * @return -x if fail
  */
 int ExePipe(std::string &cmd, std::vector<std::string> &cmd_history,
 			std::unordered_map<std::string, std::string> &alias_list) {
@@ -118,7 +120,7 @@ int ExePipe(std::string &cmd, std::vector<std::string> &cmd_history,
 	if (pipe_size == 1) { // 没有管道
 		std::vector<std::string> args = split(cmd, " ");
 		if (ExeCmdWithoutPipes(args, cmd_history, alias_list) == 0) return 0;
-		;
+		return -1;
 	} else if (pipe_size == 2) { // 一个管道
 		int fd[2];
 		int ret = pipe(fd);
@@ -197,12 +199,14 @@ int ExePipe(std::string &cmd, std::vector<std::string> &cmd_history,
 }
 
 /**
- * @brief
+ * @brief handle without pipes
  *
  * @param args
  * @param cmd_history
  * @param alias_list
  * @return int
+ * @return 0 if success
+ * @return -x if fail
  */
 int ExeCmdWithoutPipes(
 	std::vector<std::string> &args, std::vector<std::string> &cmd_history,
@@ -302,18 +306,24 @@ int ExeBuildinCmd(std::vector<std::string>					   &args,
 	else if (args[0] == "echo") {
 		if (args.size() <= 1) { return 1; }
 		if (args[1][0] == '~') {
-			std::string home_path = getenv("HOME");
+			std::string	   home_path = getenv("HOME");
+			uid_t		   uid		 = geteuid();
+			struct passwd *pw		 = getpwuid(uid);
+			std::string	   pwname	 = pw->pw_name;
 			for (size_t i = 1; i < args.size(); ++i) {
 				if (args[i][0] == '~') {
-					std::string param = args[1].substr(1);
+					std::string param = args[i].substr(1);
 					if (param == "") {
 						std::cout << home_path
 								  << ((i < args.size() - 1) ? " " : "\0");
 					} else if (param == "root") {
 						std::cout << "/root"
 								  << ((i < args.size() - 1) ? " " : "\0");
+					} else if (param == pwname) {
+						std::cout << home_path
+								  << ((i < args.size() - 1) ? " " : "\0");
 					} else {
-						std::cout << getenv(param.c_str())
+						std::cout << home_path << "/" << param
 								  << ((i < args.size() - 1) ? " " : "\0");
 					}
 				} else {
@@ -344,22 +354,31 @@ int ExeBuildinCmd(std::vector<std::string>					   &args,
 }
 
 /**
- * @brief
+ * @brief handle external command
  *
  * @param args
  * @ref https://blog.csdn.net/feng964497595/article/details/80297318
  * @return int
+ * @return 0 if success
+ * @return -1 if fail
  */
 int ExeExternalCmd(std::vector<std::string> &args) {
 	int *fd = ExeCommandWithReDir(args);
 	return ExeSingleCommand(args, fd);
 }
 
+/**
+ * @brief handle without redir
+ *
+ * @param args
+ * @return int*
+ * @return fd[0] and fd[1]
+ */
 int *ExeCommandWithReDir(std::vector<std::string> &args) {
 	int *fd;
-	fd										 = new int[2];
-	fd[0]									 = STDIN_FILENO;
-	fd[1]									 = STDOUT_FILENO;
+	fd	  = new int[2]; // 需要提前分配内存，不然make时报错
+	fd[0] = STDIN_FILENO;
+	fd[1] = STDOUT_FILENO;
 	int								   size	 = args.size();
 	std::vector<std::string>::iterator begin = args.begin();
 	std::vector<std::string>::iterator end	 = args.end();
@@ -370,7 +389,7 @@ int *ExeCommandWithReDir(std::vector<std::string> &args) {
 			args.erase(begin + i + 1, end);
 			size = args.size();		 // 重改向量的大小
 		} else if (args[i] == ">") { // WRITE
-			args.erase(begin + i); // 删除“>”字符
+			args.erase(begin + i);	 // 删除“>”字符
 			fd[1] = open(args[i].c_str(), O_WRONLY | O_CREAT | O_TRUNC,
 						 S_IRUSR | S_IWUSR);
 			args.erase(begin + i + 1, end);
@@ -387,11 +406,13 @@ int *ExeCommandWithReDir(std::vector<std::string> &args) {
 }
 
 /**
- * @brief
+ * @brief handle without redir(single command)
  *
  * @param args
  * @param fd
  * @return int
+ * @return 0 if success
+ * @return -1 if fail
  */
 int ExeSingleCommand(std::vector<std::string> &args, int fd[]) {
 
@@ -403,17 +424,17 @@ int ExeSingleCommand(std::vector<std::string> &args, int fd[]) {
 
 	dup2(fd[0], STDIN_FILENO);
 	dup2(fd[1], STDOUT_FILENO);
-	execvp(args[0].c_str(), arg_ptrs);
-
+	if (execvp(args[0].c_str(), arg_ptrs) == -1) { return -1; }
 	return 0;
 }
 
 /**
- * @brief
+ * @brief split command
  *
  * @param s
  * @param delimiter
  * @return std::vector<std::string>
+ * @return cmd that is splited
  */
 std::vector<std::string> split(std::string s, const std::string &delimiter) {
 	std::vector<std::string> res;
@@ -426,4 +447,19 @@ std::vector<std::string> split(std::string s, const std::string &delimiter) {
 	}
 	res.push_back(s);
 	return res;
+}
+
+/**
+ * @brief trim " "、"\n"、"\t"、"\r"
+ *
+ * @param cmd
+ * @return std::vector<std::string>
+ * @return command that is trimed
+ */
+std::string trim(std::string cmd) {
+	if (!cmd.empty()) {
+		cmd.erase(0, cmd.find_first_not_of(" \n\t\r"));
+		cmd.erase(cmd.find_last_not_of(" \n\t\r") + 1);
+	}
+	return cmd;
 }
