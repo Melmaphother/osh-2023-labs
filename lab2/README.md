@@ -81,28 +81,28 @@
 - **选做**
   - 当`cd`命令没参数时，返回根目录    5%
 - **结果展示**
-![](lab2_pic/cd_and_pwd.png)
+![](README_pic/cd_and_pwd.png)
 ### 管道
 - **实现两个管道**   10%
 - **实现任意长度的管道**   10%
-![](lab2_pic/pipe.png)
+![](README_pic/pipe.png)
 ### 重定向
 - **支持`<`重定向**    5%
 - **支持`>`重定向**    5%
 - **支持`>>`重定向**    5%
 - **结果展示**
-![](lab2_pic/redir.png)
+![](README_pic/redir.png)
 ### 信号处理
 - **支持ctrl+c丢弃当前命令**
 - **ctrl+c正确终止当前运行的进程**
 - **ctrl+c在shell嵌套的时候也可以正确终止当前运行的进程**
 - **结果展示**
-![](lab2_pic/signal.png)
+![](README_pic/signal.png)
 ### 前后台进程
 - **后台程序运行**    10%
 - **`wait`指令等待子进程结束**    10%
 - **结果展示**
-![](lab2_pic/background.png)
+![](README_pic/background.png)
 ### 其余功能
 **选做**
 - **支持历史记录的命令**    5%
@@ -110,16 +110,16 @@
   - `!!`
   - `!n`
   - **结果展示**
-  ![](lab2_pic/history.png)
+  ![](README_pic/history.png)
 - **`alias`重命名命令**    5%
   - **结果展示**
-  ![](lab2_pic/alias.png)
+  ![](README_pic/alias.png)
 - **`echo ~`命令**    5%
 - **`echo $`命令**    5%
   - **上面两个命令结果展示**
-  ![](lab2_pic/echo.png)
+  ![](README_pic/echo.png)
 - **`ctrl+d`命令**    5%
   - **结果展示**
-  ![](lab2_pic/ctrl+d.png)
+  ![](README_pic/ctrl+d.png)
 ## 注释
 - 选做一共做了**30%**

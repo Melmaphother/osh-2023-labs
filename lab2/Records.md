@@ -97,7 +97,7 @@
   >这里需要注意，command1 必须有正确输出，而 command2 必须可以处理 command1 的输出结果；而且 command2 只能处理 command1 的正确输出结果，不能处理 command1 的错误信息。
 
 - 父子进程使用管道通信的方法
-  ![管道](record_pic/pipe.jpg)
+  ![管道](Records_pic/pipe.jpg)
   1、父进程 `pipe`；
   2、父进程 `fork` 两次；
   3、`pid1` 关读端，重定向写端，执行命令，关写端；
@@ -105,7 +105,7 @@
   5、父进程关闭读、写端，并 `wait`；
 
 - 多于一个管道的操作方法
-  ![](record_pic/morepipes.jpg)
+  ![](Records_pic/morepipes.jpg)
   可以使用递归的方法，在每一层(图中绿线框出来的部分)做如下操作：
   - 将当前指令的OUT端与当前管道的fd[1]端(写端)相连；
   - 除第一个管道以外，将当前指令的IN端与上一个管道的fd[0]端(读端)相连
