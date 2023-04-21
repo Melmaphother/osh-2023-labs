@@ -13,7 +13,7 @@
   来运行它。
   
 - 文件框架
-  ```txt
+  ```bash
   .
   ├── build
   │   ├── final_program
