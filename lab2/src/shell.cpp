@@ -376,31 +376,32 @@ int ExeExternalCmd(std::vector<std::string> &args) {
  */
 int *ExeCommandWithReDir(std::vector<std::string> &args) {
 	int *fd;
-	fd	  = new int[2]; // 需要提前分配内存，不然make时报错
-	fd[0] = STDIN_FILENO;
-	fd[1] = STDOUT_FILENO;
-	int								   size	 = args.size();
-	std::vector<std::string>::iterator begin = args.begin();
-	std::vector<std::string>::iterator end	 = args.end();
-	for (int i = 0; i < size; i++) {
-		if (args[i] == "<") {	   // READ
-			args.erase(begin + i); // 删除“<”字符
+	fd		 = new int[2]; // 需要提前分配内存，不然make时报错
+	fd[0]	 = STDIN_FILENO;
+	fd[1]	 = STDOUT_FILENO;
+	int size = args.size();
+	int i	 = size - 1;
+	while (i >= 0) {
+		if (args[i] == "<") {			  // READ
+			args.erase(args.begin() + i); // 删除“<”字符
 			fd[0] = open(args[i].c_str(), O_RDONLY);
-			args.erase(begin + i + 1, end);
-			size = args.size();		 // 重改向量的大小
-		} else if (args[i] == ">") { // WRITE
-			args.erase(begin + i);	 // 删除“>”字符
+			args.erase(args.begin() + i, args.end());
+			size = args.size(); // 重改向量的大小
+
+		} else if (args[i] == ">") {	  // WRITE
+			args.erase(args.begin() + i); // 删除“>”字符
 			fd[1] = open(args[i].c_str(), O_WRONLY | O_CREAT | O_TRUNC,
 						 S_IRUSR | S_IWUSR);
-			args.erase(begin + i + 1, end);
+			args.erase(args.begin() + i, args.end());
 			size = args.size();
-		} else if (args[i] == ">>") { // APPEND
-			args.erase(begin + i);	  // 删除“>>”字符
+		} else if (args[i] == ">>") {	  // APPEND
+			args.erase(args.begin() + i); // 删除“>>”字符
 			fd[1] = open(args[i].c_str(), O_WRONLY | O_CREAT | O_APPEND,
 						 S_IRUSR | S_IWUSR);
-			args.erase(begin + i + 1, end);
+			args.erase(args.begin() + i, args.end());
 			size = args.size();
 		}
+		i--;
 	}
 	return fd;
 }
@@ -423,7 +424,7 @@ int ExeSingleCommand(std::vector<std::string> &args, int fd[]) {
 	arg_ptrs[args.size()] = nullptr;
 
 	dup2(fd[0], STDIN_FILENO);
-	dup2(fd[1], STDOUT_FILENO);
+	dup2(fd[1], STDOUT_FILENO); // 将命令与重定向文件连接
 	if (execvp(args[0].c_str(), arg_ptrs) == -1) { return -1; }
 	return 0;
 }
