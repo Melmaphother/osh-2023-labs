@@ -84,17 +84,14 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 	}
 }
 
-void handle_clnt(int client_socket) {
+void handle_clnt(int client_socket, int fd) {
 	// 读取客户端发送来的数据，并解析
-	char *req = (char *)malloc(MAX_RECV_LEN * sizeof(char));
-	if (req == NULL) Error("req_buf malloc failed\n");
-	req[0] = '\0';
+
 	// memset(req, '\0', MAX_RECV_LEN * sizeof(char));
 	char *response = (char *)malloc(MAX_SEND_LEN * sizeof(char));
 	if (response == NULL) Error("response malloc failed\n");
-	ssize_t		req_len = 0;
+
 	struct stat file_type;
-	int			fd = parse_request(client_socket, &req_len, req, &file_type);
 
 	/*
 	  构造要返回的数据
@@ -142,7 +139,7 @@ void handle_clnt(int client_socket) {
 	close(client_socket);
 
 	// 释放内存
-	free(req);
+
 	free(response);
 }
 
@@ -252,6 +249,15 @@ int main() {
 			} else if (events[i].events & EPOLLIN) { // 文件描述符可读
 				int client_socket = events[i].data.fd;
 				// TODO
+				char *req = (char *)malloc(MAX_RECV_LEN * sizeof(char));
+				if (req == NULL) Error("req_buf malloc failed\n");
+				req[0]				= '\0';
+				ssize_t		req_len = 0;
+				struct stat file_type;
+				int fd =
+					parse_request(client_socket, &req_len, req, &file_type);
+				epoll_write(epoll_fd);
+				free(req);
 			} else if (events[i].events & EPOLLOUT) { // 文件描述符可写
 				int client_socket = events[i].data.fd;
 				// TODO

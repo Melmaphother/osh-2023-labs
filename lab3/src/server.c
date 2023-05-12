@@ -35,6 +35,14 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 		buf[buf_len] = '\0'; // 最后一位清零保证之后strcat有效
 		strcat(req, buf);
 		*req_len = strlen(req); // 更新req的长度
+        for(int i = 0;i < 5;i++){
+            printf("%c", req[i]);
+        }
+        printf("\n");
+		if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' && req[3] != ' ' &&
+			req[4] != '/') {
+			break; // 开头不是'GET /'
+		}
 		if (buf[buf_len - 4] == '\r' && buf[buf_len - 3] == '\n' &&
 			buf[buf_len - 2] == '\r' && buf[buf_len - 1] == '\n') {
 			break; // 读到"\r\n\r\n"停止读取
@@ -183,6 +191,7 @@ int main() {
 		int client_socket = accept(serv_sock, (struct sockaddr *)&client_addr,
 								   &client_addr_size);
 		// 处理客户端的请求
+		// handle_clnt(client_socket);
 		if (client_socket != -1) { threadpool_add(pool, client_socket); }
 	}
 
