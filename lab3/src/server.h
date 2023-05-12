@@ -1,13 +1,13 @@
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <math.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define BIND_IP_ADDR "127.0.0.1"
 #define BIND_PORT 8000
@@ -25,3 +25,7 @@
 		perror(error);                                                         \
 		exit(EXIT_FAILURE);                                                    \
 	} while (0)
+
+void handle_clnt(int client_socket);
+int	 parse_request(int client_socket, ssize_t *req_len, char *req,
+				   struct stat *file_type);
