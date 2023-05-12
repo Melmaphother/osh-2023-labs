@@ -105,7 +105,7 @@ void handle_clnt(int client_socket) {
 				HTTP_STATUS_500, (size_t)0);
 		size_t response_len = strlen(response);
 		if (write(client_socket, response, response_len) == -1) {
-			Error("write response failed, 500 Internal Server Error")
+			Error("write response failed, 500 Internal Server Error");
 		}
 	} else if (fd == -1) {
 		// 404
@@ -113,7 +113,7 @@ void handle_clnt(int client_socket) {
 				HTTP_STATUS_404, (size_t)0);
 		size_t response_len = strlen(response);
 		if (write(client_socket, response, response_len) == -1) {
-			Error("write response failed, 404 Not Found")
+			Error("write response failed, 404 Not Found");
 		}
 	} else {
 		// 200
