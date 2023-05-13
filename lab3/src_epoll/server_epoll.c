@@ -15,8 +15,16 @@
 #define HTTP_STATUS_404 "404 Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
 
-int parse_request(int client_socket, ssize_t *req_len, char *req,
-				  struct stat *file_type) {
+typedef struct Response {
+	int fd;
+	int status;
+} Response;
+typedef struct Connection {
+	int		 fd;
+	Response response;
+} Connection;
+int parse_request(Connection *connect, int epoll_fd, int client_socket, ssize_t *req_len,
+				  char *req, struct stat *file_type) {
 	/*
 	  for (int i = 0; i < req_len; i++) { printf("%c", req[i]); }
 	  printf("\n");
@@ -46,10 +54,13 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 	if (*req_len <= 0) { // 没有读取，直接退出终端
 		Error("failed to read client_socket\n");
 	} else if (*req_len < 5) { // 没有'GET /'，返回500
+		connect->response.status = 500;
+        epoll_write(connect, epoll_fd);
 		return -2;
 	} else { // 需要判断是否是正常文件和文件类型，
 		if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' && req[3] != ' ' &&
 			req[4] != '/') {
+			connect->response.status = 500;
 			return -2; // 开头不是'GET /'
 		}
 		/*
@@ -69,17 +80,39 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 					floor++;
 				}
 				printf("%d\n", floor);
-				if (floor < 0) { return -2; } // 已经在当前路径的上级
+				if (floor < 0) {
+					connect->response.status = 500;
+                    epoll_write(connect, epoll_fd);
+					return -2;
+				} // 已经在当前路径的上级{
 			}
 			end++;
 		}
-		if (end - begin > MAX_PATH_LEN) return -2; // 超过最长路径
+		if (end - begin > MAX_PATH_LEN) {
+            epoll_write(connect, epoll_fd);
+            return -2; // 超过最长路径
+        }
 		req[end] = '\0';						   // 将空格改为'\0'
 		int fd	 = open(req + begin, O_RDONLY);	   // 以只读方式打开
-		if (fd < 0) return -1; // 打开文件失败，返回404
+		if (fd < 0) {
+			connect->response.status = 404;
+            epoll_write(connect, epoll_fd);
+			return -1; // 打开文件失败，返回404
+		}
 		if (stat(req + begin, file_type) == -1) { Error("stat failed\n"); }
-		if (S_ISDIR(file_type->st_mode)) return -2; // 是目录文件，返回500
-		if (!S_ISREG(file_type->st_mode)) return -2; // 不是普通文件，返回500
+		if (S_ISDIR(file_type->st_mode)) {
+			connect->response.status = 500;
+            epoll_write(connect, epoll_fd);
+			return -2; // 是目录文件，返回500
+		}
+		if (!S_ISREG(file_type->st_mode)) {
+            connect->response.status = 500;
+            epoll_write(connect, epoll_fd);
+			return -2; // 不是普通文件，返回500
+		}
+		connect->response.fd	 = fd;
+		connect->response.status = 200;
+        epoll_write(connect, epoll_fd);
 		return fd;
 	}
 }
@@ -152,17 +185,19 @@ void epoll_register(int epoll_fd, int fd, int state) {
 	};
 }
 
-void epoll_read(int epoll_fd) {
+void epoll_read(Connection *connect, int epoll_fd) {
 	struct epoll_event event;
-	event.events = EPOLLIN | EPOLLET;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, event.data.fd, &event) == -1) {
+	event.data.ptr = (void *)connect;
+	event.events   = EPOLLIN | EPOLLET;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, connect->fd, &event) == -1) {
 		Error("REad epoll failed");
 	};
 }
-void epoll_write(int epoll_fd) {
+void epoll_write(Connection *connect, int epoll_fd) {
 	struct epoll_event event;
-	event.events = EPOLLOUT | EPOLLET;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, event.data.fd, &event) == -1) {
+	event.data.ptr = (void *)connect;
+	event.events   = EPOLLOUT | EPOLLET;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, connect->fd, &event) == -1) {
 		Error("Write epoll failed");
 	};
 }
@@ -227,7 +262,12 @@ int main() {
 	  注册socketEPOLL事件为ET模式
 	*/
 	struct epoll_event events[MAX_EVENTS];
-	epoll_register(epoll_fd, server_socket, EPOLLIN | EPOLLET);
+	struct epoll_event event;
+	event.events  = EPOLLIN | EPOLLET;
+	event.data.fd = server_socket;
+	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) {
+		Error("Register epoll failed");
+	};
 	int event_num = 0;
 	while (1) {
 		event_num = epoll_wait(epoll_fd, events, MAX_EVENTS, 0);
@@ -245,22 +285,27 @@ int main() {
 				if (make_socket_non_blocking(client_socket) == -1) {
 					Error("Set non blocking failed");
 				}
-				epoll_register(epoll_fd, client_socket, EPOLLIN | EPOLLET);
+				Connection *connect = (Connection *)malloc(sizeof(Connection));
+				connect->fd			= client_socket;
+				event.data.ptr		= (void *)connect;
+				event.events		= EPOLLIN | EPOLLET;
+				if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket, &event) ==
+					-1) {
+					Error("Register epoll failed");
+				};
 			} else if (events[i].events & EPOLLIN) { // 文件描述符可读
-				int client_socket = events[i].data.fd;
-				// TODO
-				char *req = (char *)malloc(MAX_RECV_LEN * sizeof(char));
+				Connection *connect		  = (Connection *)events[i].data.ptr;
+				int			client_socket = connect->fd;
+				char	   *req = (char *)malloc(MAX_RECV_LEN * sizeof(char));
 				if (req == NULL) Error("req_buf malloc failed\n");
 				req[0]				= '\0';
 				ssize_t		req_len = 0;
 				struct stat file_type;
-				int fd =
-					parse_request(client_socket, &req_len, req, &file_type);
-				epoll_write(epoll_fd);
-				free(req);
+				int fd = parse_request(connect, epoll_fd, client_socket, &req_len, req,
+									   &file_type);
 			} else if (events[i].events & EPOLLOUT) { // 文件描述符可写
 				int client_socket = events[i].data.fd;
-				// TODO
+				
 			}
 		}
 	}
