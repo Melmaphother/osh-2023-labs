@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -28,8 +29,10 @@
 	} while (0)
 
 typedef struct Response {
-	int fd;
-	int status;
+	int	   fd;
+	int	   status;
+	size_t pos;
+	size_t size;
 } Response;
 typedef struct Connection {
 	int		 fd;

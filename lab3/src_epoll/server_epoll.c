@@ -15,8 +15,6 @@
 #define HTTP_STATUS_404 "404 Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
 
-
-
 int parse_request(Connection *connect, int epoll_fd, int client_socket,
 				  ssize_t *req_len, char *req, struct stat *file_type) {
 	/*
@@ -106,6 +104,7 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket,
 		}
 		connect->response.fd	 = fd;
 		connect->response.status = 200;
+		connect->response.size	 = file_type->st_size;
 		epoll_write(connect, epoll_fd);
 		return fd;
 	}
@@ -152,12 +151,18 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 			Error("write response failed, 200 OK");
 		}
 
-		// 循环读取文件内容并返回文件内容
-		while (response_len = read(client_socket, response, MAX_SEND_LEN)) {
-			if (response_len == -1) Error("read file failed");
-			if (write(client_socket, response, response_len) == -1) {
-				Error("write file failed");
+		// 返回文件内容
+		while (1) {
+			if (connect->response.pos >= connect->response.size) {
+				break;
 			}
+			int size = sendfile(client_socket, connect->response.fd, NULL, 8192);
+			if (size > 0) {
+				connect->response.pos += size;
+				continue;
+			} else{
+				break;
+			} 
 		}
 	}
 
@@ -243,9 +248,9 @@ int main() {
 
 	// 使得 server_socket 套接字进入监听状态，开始等待客户端发起请求
 	listen(server_socket, MAX_CONN);
-    //
-    make_socket_non_blocking(server_socket);
-    
+	//
+	make_socket_non_blocking(server_socket);
+
 	struct sockaddr_in client_addr;
 	socklen_t		   client_addr_size = sizeof(client_addr);
 	/*
@@ -284,8 +289,10 @@ int main() {
 				}
 				Connection *connect = (Connection *)malloc(sizeof(Connection));
 				connect->fd			= client_socket;
-				event.data.ptr		= (void *)connect;
-				event.events		= EPOLLIN | EPOLLET;
+				connect->response.pos  = 0;
+				connect->response.size = 0;
+				event.data.ptr		   = (void *)connect;
+				event.events		   = EPOLLIN | EPOLLET;
 				if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket, &event) ==
 					-1) {
 					Error("Register epoll failed");
