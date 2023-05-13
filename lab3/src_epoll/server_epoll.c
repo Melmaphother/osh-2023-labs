@@ -15,14 +15,7 @@
 #define HTTP_STATUS_404 "404 Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
 
-typedef struct Response {
-	int fd;
-	int status;
-} Response;
-typedef struct Connection {
-	int		 fd;
-	Response response;
-} Connection;
+
 
 int parse_request(Connection *connect, int epoll_fd, int client_socket,
 				  ssize_t *req_len, char *req, struct stat *file_type) {
@@ -250,8 +243,9 @@ int main() {
 
 	// 使得 server_socket 套接字进入监听状态，开始等待客户端发起请求
 	listen(server_socket, MAX_CONN);
-
-	// 接收客户端请求，获得一个可以与客户端通信的新的生成的套接字 clnt_sock
+    //
+    make_socket_non_blocking(server_socket);
+    
 	struct sockaddr_in client_addr;
 	socklen_t		   client_addr_size = sizeof(client_addr);
 	/*

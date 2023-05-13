@@ -27,11 +27,19 @@
 		exit(EXIT_FAILURE);                                                    \
 	} while (0)
 
-int parse_request(Connection *connect, int epoll_fd, int client_socket,
-				  ssize_t *req_len, char *req, struct stat *file_type);
+typedef struct Response {
+	int fd;
+	int status;
+} Response;
+typedef struct Connection {
+	int		 fd;
+	Response response;
+} Connection;
+
+int	 parse_request(Connection *connect, int epoll_fd, int client_socket,
+				   ssize_t *req_len, char *req, struct stat *file_type);
 void handle_clnt(Connection *connect, int epoll_fd, int client_socket);
 void epoll_register(int epoll_fd, int fd, int state);
 void epoll_read(Connection *connect, int epoll_fd);
 void epoll_write(Connection *connect, int epoll_fd);
-int make_socket_non_blocking(int fd);
-
+int	 make_socket_non_blocking(int fd);
