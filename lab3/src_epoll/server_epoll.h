@@ -20,7 +20,7 @@
 #define MAX_PATH_LEN 1024
 #define MAX_HOST_LEN 1024
 #define MAX_CONN 20
-#define FD_SIZE 1024
+#define FD_SIZE 3000
 #define MAX_EVENTS 256
 
 #define HTTP_STATUS_200 "200 OK"

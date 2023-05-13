@@ -2,20 +2,6 @@
 #include "server.h"
 #include "thread.h"
 
-#define BIND_IP_ADDR "127.0.0.1"
-#define BIND_PORT 8000
-#define MAX_RECV_LEN 1048576
-#define MAX_SEND_LEN 1048576
-#define MAX_PATH_LEN 1024
-#define MAX_HOST_LEN 1024
-#define MAX_CONN 20
-#define MAX_THREAD 50
-#define MAX_QUEUE_SIZE 1024
-
-#define HTTP_STATUS_200 "200 OK"
-#define HTTP_STATUS_404 "404 Not Found"
-#define HTTP_STATUS_500 "500 Internal Server Error"
-
 int parse_request(int client_socket, ssize_t *req_len, char *req,
 				  struct stat *file_type) {
 	/*
@@ -153,7 +139,7 @@ void handle_clnt(int client_socket) {
 }
 
 int main() {
-
+    signal(SIGPIPE, SIG_IGN);
 	// 创建套接字，参数说明：
 	//   AF_INET: 使用 IPv4
 	//   SOCK_STREAM: 面向连接的数据传输方式

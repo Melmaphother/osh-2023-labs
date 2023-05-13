@@ -211,7 +211,7 @@ int make_socket_non_blocking(int fd) {
 }
 
 int main() {
-
+	signal(SIGPIPE, SIG_IGN);
 	// 创建套接字，参数说明：
 	//   AF_INET: 使用 IPv4
 	//   SOCK_STREAM: 面向连接的数据传输方式
