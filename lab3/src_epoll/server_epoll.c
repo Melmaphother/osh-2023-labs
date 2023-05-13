@@ -158,23 +158,10 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 
 		// 关闭客户端socket
 		close(client_socket);
-		// connect->response.status = 200;
-		// connect->response.fd	 = -1;
-		// epoll_read(connect, epoll_fd);
-		// 释放内存
 		free(connect);
 		free(response);
 	}
 }
-
-// void epoll_register(int epoll_fd, int fd, int state) {
-// 	struct epoll_event event;
-// 	event.events  = state;
-// 	event.data.fd = fd;
-// 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1) {
-// 		Error("Register epoll failed");
-// 	};
-// }
 
 void epoll_read(Connection *connect, int epoll_fd) {
 	struct epoll_event event;
@@ -303,8 +290,6 @@ int main() {
 			}
 		}
 	}
-	// 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动
-	// break 关闭套接字
 	close(server_socket);
 	return 0;
 }
