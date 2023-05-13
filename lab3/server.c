@@ -1,6 +1,13 @@
-// server.c
-#include "server.h"
-#include "thread.h"
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <math.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #define BIND_IP_ADDR "127.0.0.1"
 #define BIND_PORT 8000
@@ -9,12 +16,19 @@
 #define MAX_PATH_LEN 1024
 #define MAX_HOST_LEN 1024
 #define MAX_CONN 20
-#define MAX_THREAD 50
-#define MAX_QUEUE_SIZE 1024
 
 #define HTTP_STATUS_200 "200 OK"
 #define HTTP_STATUS_404 "404 Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
+#define Error(error)                                                           \
+	do {                                                                       \
+		perror(error);                                                         \
+		exit(EXIT_FAILURE);                                                    \
+	} while (0)
+
+void handle_clnt(int client_socket);
+int	 parse_request(int client_socket, ssize_t *req_len, char *req,
+				   struct stat *file_type);
 
 int parse_request(int client_socket, ssize_t *req_len, char *req,
 				  struct stat *file_type) {
@@ -25,7 +39,6 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 	*/
 	char   *buf		= (char *)malloc(MAX_RECV_LEN * sizeof(char));
 	ssize_t buf_len = 0;
-	int		flag	= 1;
 	while (1) {
 		/*
 		  这里只能read最多MAX_RECV_LEN - *req_len - 1位
@@ -36,12 +49,9 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 		buf[buf_len] = '\0'; // 最后一位清零保证之后strcat有效
 		strcat(req, buf);
 		*req_len = strlen(req); // 更新req的长度
-		if (flag == 1) {
-			if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' &&
-				req[3] != ' ' && req[4] != '/') {
-				break; // 开头不是'GET /'
-			}
-			flag = 0;
+		if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' && req[3] != ' ' &&
+			req[4] != '/') {
+			break; // 开头不是'GET /'
 		}
 		if (buf[buf_len - 4] == '\r' && buf[buf_len - 3] == '\n' &&
 			buf[buf_len - 2] == '\r' && buf[buf_len - 1] == '\n') {
@@ -184,15 +194,14 @@ int main() {
 	struct sockaddr_in client_addr;
 	socklen_t		   client_addr_size = sizeof(client_addr);
 
-	threadpool_t *pool = threadpool_create(MAX_THREAD, MAX_QUEUE_SIZE);
 	while (1) // 一直循环
 	{
 		// 当没有客户端连接时， accept() 会阻塞程序执行，直到有客户端连接进来
 		int client_socket = accept(serv_sock, (struct sockaddr *)&client_addr,
 								   &client_addr_size);
 		// 处理客户端的请求
-		// handle_clnt(client_socket);
-		if (client_socket != -1) { threadpool_add(pool, client_socket); }
+		handle_clnt(client_socket);
+		//if (client_socket != -1) { threadpool_add(pool, client_socket); }
 	}
 
 	// 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动 break

@@ -18,6 +18,8 @@
 #define MAX_PATH_LEN 1024
 #define MAX_HOST_LEN 1024
 #define MAX_CONN 20
+#define FD_SIZE 1024
+#define MAX_EVENTS 256
 
 #define HTTP_STATUS_200 "200 OK"
 #define HTTP_STATUS_404 "404 Not Found"
@@ -39,8 +41,7 @@ typedef struct Connection {
 	Response response;
 } Connection;
 
-int	 parse_request(Connection *connect, int epoll_fd, int client_socket,
-				   ssize_t *req_len, char *req, struct stat *file_type);
+int	 parse_request(Connection *connect, int epoll_fd, int client_socket);
 void handle_clnt(Connection *connect, int epoll_fd, int client_socket);
 void epoll_register(int epoll_fd, int fd, int state);
 void epoll_read(Connection *connect, int epoll_fd);
