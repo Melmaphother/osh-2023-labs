@@ -23,8 +23,9 @@ typedef struct Connection {
 	int		 fd;
 	Response response;
 } Connection;
-int parse_request(Connection *connect, int epoll_fd, int client_socket, ssize_t *req_len,
-				  char *req, struct stat *file_type) {
+
+int parse_request(Connection *connect, int epoll_fd, int client_socket,
+				  ssize_t *req_len, char *req, struct stat *file_type) {
 	/*
 	  for (int i = 0; i < req_len; i++) { printf("%c", req[i]); }
 	  printf("\n");
@@ -55,7 +56,7 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket, ssize_t 
 		Error("failed to read client_socket\n");
 	} else if (*req_len < 5) { // 没有'GET /'，返回500
 		connect->response.status = 500;
-        epoll_write(connect, epoll_fd);
+		epoll_write(connect, epoll_fd);
 		return -2;
 	} else { // 需要判断是否是正常文件和文件类型，
 		if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' && req[3] != ' ' &&
@@ -82,42 +83,42 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket, ssize_t 
 				printf("%d\n", floor);
 				if (floor < 0) {
 					connect->response.status = 500;
-                    epoll_write(connect, epoll_fd);
+					epoll_write(connect, epoll_fd);
 					return -2;
 				} // 已经在当前路径的上级{
 			}
 			end++;
 		}
 		if (end - begin > MAX_PATH_LEN) {
-            epoll_write(connect, epoll_fd);
-            return -2; // 超过最长路径
-        }
-		req[end] = '\0';						   // 将空格改为'\0'
-		int fd	 = open(req + begin, O_RDONLY);	   // 以只读方式打开
+			epoll_write(connect, epoll_fd);
+			return -2; // 超过最长路径
+		}
+		req[end] = '\0';						// 将空格改为'\0'
+		int fd	 = open(req + begin, O_RDONLY); // 以只读方式打开
 		if (fd < 0) {
 			connect->response.status = 404;
-            epoll_write(connect, epoll_fd);
+			epoll_write(connect, epoll_fd);
 			return -1; // 打开文件失败，返回404
 		}
 		if (stat(req + begin, file_type) == -1) { Error("stat failed\n"); }
 		if (S_ISDIR(file_type->st_mode)) {
 			connect->response.status = 500;
-            epoll_write(connect, epoll_fd);
+			epoll_write(connect, epoll_fd);
 			return -2; // 是目录文件，返回500
 		}
 		if (!S_ISREG(file_type->st_mode)) {
-            connect->response.status = 500;
-            epoll_write(connect, epoll_fd);
+			connect->response.status = 500;
+			epoll_write(connect, epoll_fd);
 			return -2; // 不是普通文件，返回500
 		}
 		connect->response.fd	 = fd;
 		connect->response.status = 200;
-        epoll_write(connect, epoll_fd);
+		epoll_write(connect, epoll_fd);
 		return fd;
 	}
 }
 
-void handle_clnt(int client_socket, int fd) {
+void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 	// 读取客户端发送来的数据，并解析
 
 	// memset(req, '\0', MAX_RECV_LEN * sizeof(char));
@@ -131,7 +132,7 @@ void handle_clnt(int client_socket, int fd) {
 	  其中write()函数通过
 	  clnt_sock 向客户端发送信息，将 clnt_sock 作为文件描述符写内容
 	*/
-	if (fd == -2) {
+	if (connect->response.status == 500) {
 		// 500
 		sprintf(response, "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n",
 				HTTP_STATUS_500, (size_t)0);
@@ -139,7 +140,7 @@ void handle_clnt(int client_socket, int fd) {
 		if (write(client_socket, response, response_len) == -1) {
 			Error("write response failed, 500 Internal Server Error");
 		}
-	} else if (fd == -1) {
+	} else if (connect->response.status == 404) {
 		// 404
 		sprintf(response, "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n",
 				HTTP_STATUS_404, (size_t)0);
@@ -159,7 +160,7 @@ void handle_clnt(int client_socket, int fd) {
 		}
 
 		// 循环读取文件内容并返回文件内容
-		while (response_len = read(fd, response, MAX_SEND_LEN)) {
+		while (response_len = read(client_socket, response, MAX_SEND_LEN)) {
 			if (response_len == -1) Error("read file failed");
 			if (write(client_socket, response, response_len) == -1) {
 				Error("write file failed");
@@ -167,12 +168,14 @@ void handle_clnt(int client_socket, int fd) {
 		}
 	}
 
-	// 关闭客户端socket和文件
-	close(fd);
+	// 关闭客户端socket
 	close(client_socket);
+	connect->response.status = 200;
+	connect->response.fd	 = -1;
+	epoll_read(connect, epoll_fd);
 
 	// 释放内存
-
+	free(connect);
 	free(response);
 }
 
@@ -301,11 +304,12 @@ int main() {
 				req[0]				= '\0';
 				ssize_t		req_len = 0;
 				struct stat file_type;
-				int fd = parse_request(connect, epoll_fd, client_socket, &req_len, req,
-									   &file_type);
+				int			fd = parse_request(connect, epoll_fd, client_socket,
+											   &req_len, req, &file_type);
 			} else if (events[i].events & EPOLLOUT) { // 文件描述符可写
-				int client_socket = events[i].data.fd;
-				
+				Connection *connect		  = (Connection *)events[i].data.ptr;
+				int			client_socket = connect->fd;
+				handle_clnt(connect, epoll_fd, client_socket);
 			}
 		}
 	}
