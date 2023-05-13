@@ -34,7 +34,7 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket) {
 		}
 	}
 	if (req_len <= 0) { // 没有读取，直接退出终端
-        close(client_socket);
+		close(client_socket);
 		Error("failed to read client_socket\n");
 	} else if (req_len < 5) { // 没有'GET /'，返回500
 		connect->response.status = 500;
@@ -120,7 +120,7 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 		size_t response_len = strlen(response);
 		if (write(client_socket, response, response_len) == -1) {
 			close(client_socket);
-            Error("write response failed, 500 Internal Server Error");
+			Error("write response failed, 500 Internal Server Error");
 		}
 	} else if (connect->response.status == 404) {
 		// 404
@@ -129,7 +129,7 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 		size_t response_len = strlen(response);
 		if (write(client_socket, response, response_len) == -1) {
 			close(client_socket);
-            Error("write response failed, 404 Not Found");
+			Error("write response failed, 404 Not Found");
 		}
 	} else {
 		// 200
@@ -140,38 +140,41 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 		size_t response_len = strlen(response);
 		if (write(client_socket, response, response_len) == -1) {
 			close(client_socket);
-            Error("write response failed");
+			Error("write response failed");
 		}
 		// printf("%ld\n", connect->response.size);
 		int size = sendfile(client_socket, connect->response.fd, NULL,
 							connect->response.size);
 		if (size < 0) { Error("sendfile failed"); }
-		// while (response_len = read(connect->response.fd, response,
-		// MAX_SEND_LEN)) { 	if (response_len == -1) Error("read file
-		// failed"); 	if (write(client_socket, response, response_len) == -1)
-		// { 		Error("write file failed");
+		// while (response_len =
+		// 		   read(connect->response.fd, response, MAX_SEND_LEN)) {
+		// 	if (response_len == -1) {
+		// 		Error("read file failed");
+		// 		if (write(client_socket, response, response_len) == -1) {
+		// 			Error("write file failed");
+		// 		}
 		// 	}
 		// }
+
+		// 关闭客户端socket
+		close(client_socket);
+		// connect->response.status = 200;
+		// connect->response.fd	 = -1;
+		// epoll_read(connect, epoll_fd);
+		// 释放内存
+		free(connect);
+		free(response);
 	}
-
-	// 关闭客户端socket
-	close(client_socket);
-	// connect->response.status = 200;
-	// connect->response.fd	 = -1;
-    // epoll_read(connect, epoll_fd);
-	// 释放内存
-	free(connect);
-	free(response);
 }
 
-void epoll_register(int epoll_fd, int fd, int state) {
-	struct epoll_event event;
-	event.events  = state;
-	event.data.fd = fd;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1) {
-		Error("Register epoll failed");
-	};
-}
+// void epoll_register(int epoll_fd, int fd, int state) {
+// 	struct epoll_event event;
+// 	event.events  = state;
+// 	event.data.fd = fd;
+// 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1) {
+// 		Error("Register epoll failed");
+// 	};
+// }
 
 void epoll_read(Connection *connect, int epoll_fd) {
 	struct epoll_event event;
@@ -238,8 +241,6 @@ int main() {
 	//
 	make_socket_non_blocking(server_socket);
 
-	struct sockaddr_in client_addr;
-	socklen_t		   client_addr_size = sizeof(client_addr);
 	/*
 	  参考https://github.com/zhenbianshu/tinyServer/blob/master/server.c
 	*/
@@ -259,32 +260,38 @@ int main() {
 	};
 	int event_num = 0;
 	while (1) {
-		event_num = epoll_wait(epoll_fd, events, MAX_EVENTS, 0);
+		event_num = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
 		if (event_num == -1) { Error("Wait epoll failed"); }
 		for (int i = 0; i < event_num; i++) {
 			if (events[i].events == EPOLLERR) { // 连接出错
 				continue;
 			}
-			if (events[i].data.fd ==
-				server_socket) { // 有新的连接（一个或者多个）
-				int client_socket =
-					accept(server_socket, (struct sockaddr *)&client_addr,
-						   &client_addr_size);
-				if (client_socket == -1) { Error("Accept failed"); }
-				if (make_socket_non_blocking(client_socket) == -1) {
-					Error("Set non blocking failed");
+			if (events[i].data.fd == server_socket) { // 有新的连接
+				while (1) {
+					struct sockaddr_in client_addr;
+					socklen_t		   client_addr_size = sizeof(client_addr);
+					int				   client_socket =
+						accept(server_socket, (struct sockaddr *)&client_addr,
+							   &client_addr_size);
+					if (client_socket == -1) {
+						if (errno = EAGAIN) { break; }
+						Error("Accept failed");
+					}
+					if (make_socket_non_blocking(client_socket) == -1) {
+						Error("Set non blocking failed");
+					}
+					Connection *connect =
+						(Connection *)malloc(sizeof(Connection));
+					connect->fd			   = client_socket;
+					connect->response.pos  = 0;
+					connect->response.size = 0;
+					event.data.ptr		   = (void *)connect;
+					event.events		   = EPOLLIN | EPOLLET;
+					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket,
+								  &event) == -1) {
+						Error("Register epoll failed");
+					};
 				}
-                printf("%d\n", sizeof(Connection));
-				Connection *connect = (Connection *)malloc(sizeof(Connection));
-				connect->fd			= client_socket;
-				connect->response.pos  = 0;
-				connect->response.size = 0;
-				event.data.ptr		   = (void *)connect;
-				event.events		   = EPOLLIN | EPOLLET;
-				if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket, &event) ==
-					-1) {
-					Error("Register epoll failed");
-				};
 			} else if (events[i].events == EPOLLIN) { // 文件描述符可读
 				Connection *connect		  = (Connection *)events[i].data.ptr;
 				int			client_socket = connect->fd;
@@ -296,8 +303,8 @@ int main() {
 			}
 		}
 	}
-	// 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动 break
-	// 关闭套接字
+	// 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动
+	// break 关闭套接字
 	close(server_socket);
 	return 0;
 }
