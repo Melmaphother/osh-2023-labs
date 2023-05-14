@@ -143,18 +143,21 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 			Error("write response failed");
 		}
 		// printf("%ld\n", connect->response.size);
-		int size = sendfile(client_socket, connect->response.fd, NULL,
-							connect->response.size);
-		if (size < 0) { Error("sendfile failed"); }
-		// while (response_len =
-		// 		   read(connect->response.fd, response, MAX_SEND_LEN)) {
-		// 	if (response_len == -1) {
-		// 		Error("read file failed");
-		// 		if (write(client_socket, response, response_len) == -1) {
-		// 			Error("write file failed");
-		// 		}
-		// 	}
-		// }
+		// int size = sendfile(client_socket, connect->response.fd, NULL,
+		// 					connect->response.size);
+		// if (size < 0) { Error("sendfile failed"); }
+        /* 注意这里使用sendfile也要循环写入，不能假定其一次写成功 */
+		ssize_t size = connect->response.size;
+		ssize_t writen;
+		while (size > 0) {
+			writen = sendfile(client_socket, connect->response.fd, NULL, size);
+			if (writen < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+				perror("sendfile");
+				break;
+			}
+			size -= writen;
+		}
 		// 关闭文件描述符
 		close(connect->response.fd);
 	}
@@ -164,15 +167,7 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 	free(response);
 }
 
-// void epoll_register(int epoll_fd, int fd, int state) {
-// 	struct epoll_event event;
-// 	event.events  = state;
-// 	event.data.fd = fd;
-// 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1) {
-// 		Error("Register epoll failed");
-// 	};
-// }
-
+/* 其实这里用不到epoll_read函数，但是写出来可供参考 */
 void epoll_read(Connection *connect, int epoll_fd) {
 	struct epoll_event event;
 	event.data.ptr = (void *)connect;
@@ -232,28 +227,27 @@ int main() {
 	server_addr.sin_port		= htons(BIND_PORT);
 	//   绑定
 	bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr));
-	if (make_socket_non_blocking(server_socket) == -1) {
-		Error("Set non blocking failed");
-	};
+
 	// 使得 server_socket 套接字进入监听状态，开始等待客户端发起请求
 	listen(server_socket, MAX_CONN);
 	//
-
+	if (make_socket_non_blocking(server_socket) == -1) {
+		Error("Set non blocking failed");
+	};
 	/*
 	  参考https://github.com/zhenbianshu/tinyServer/blob/master/server.c
 	*/
 	/* 创建epoll */
-	int epoll_fd = epoll_create1(0);
+	int epoll_fd = epoll_create(FD_SIZE);
 	if (epoll_fd == -1) { Error("create epoll failed"); }
 	/*
 	  定义事件组
 	  注册socketEPOLL事件为ET(垂直触发)模式
 	*/
-	struct epoll_event *events;
-	struct epoll_event	event;
+	struct epoll_event events[MAX_EVENTS];
+	struct epoll_event event;
 	event.events  = EPOLLIN | EPOLLET;
 	event.data.fd = server_socket;
-	events		  = calloc(MAX_EVENTS, sizeof(event));
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) {
 		Error("Register epoll failed");
 	};
@@ -288,7 +282,6 @@ int main() {
 						(Connection *)malloc(sizeof(Connection));
 					connect->fd	   = client_socket;
 					event.data.ptr = (void *)connect;
-					event.data.fd  = client_socket;
 					event.events   = EPOLLIN | EPOLLET;
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket,
 								  &event) == -1) {
