@@ -146,7 +146,7 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 		// int size = sendfile(client_socket, connect->response.fd, NULL,
 		// 					connect->response.size);
 		// if (size < 0) { Error("sendfile failed"); }
-        /* 注意这里使用sendfile也要循环写入，不能假定其一次写成功 */
+		/* 注意这里使用sendfile也要循环写入，不能假定其一次写成功 */
 		ssize_t size = connect->response.size;
 		ssize_t writen;
 		while (size > 0) {
