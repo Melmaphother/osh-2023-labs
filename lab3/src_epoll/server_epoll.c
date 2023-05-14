@@ -299,8 +299,6 @@ int main() {
 			}
 		}
 	}
-	// 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动
-	// break 关闭套接字
 	close(server_socket);
 	return 0;
 }
