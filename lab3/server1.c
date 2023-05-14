@@ -1,315 +1,284 @@
 #include <math.h>
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <signal.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
-#define BIND_IP_ADDR "0.0.0.0"
+#define BIND_IP_ADDR "127.0.0.1"
 #define BIND_PORT 8000
 #define MAX_RECV_LEN 1048576
 #define MAX_SEND_LEN 1048576
-#define MAX_PATH_LEN 4096
-#define MAX_CONN 50
-
-#define handle_error(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
+#define MAX_PATH_LEN 1024
+#define MAX_HOST_LEN 1024
+#define MAX_CONN SOMAXCONN
+#define MAXEVENTS 1024
 
 #define HTTP_STATUS_200 "200 OK"
-#define HTTP_STATUS_404 "404 Not Found"
+#define HTTP_STATUS_404 "404 File Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
 
+char path[MAX_CONN][MAX_PATH_LEN];
+ssize_t path_len[MAX_CONN];
 
-int parse_request(int clnt_sock,char *req,ssize_t *req_len,struct stat *fstatus)
-{
-    req[0] = '\0';
-    char* buf = (char*) malloc(MAX_RECV_LEN * sizeof(char));
-    ssize_t read_len;
-    while(1)
-    {
-        read_len = read(clnt_sock, buf, MAX_RECV_LEN - 1);
-        if (read_len < 0) handle_error("failed to read clnt_sock");
-        buf[read_len] = '\0';
-        strcat(req, buf);
-        if(buf[read_len - 4] == '\r' && buf[read_len - 3] == '\n' && buf[read_len - 2] == '\r' && buf[read_len - 1] == '\n') break;
-    }
-    *req_len = strlen(req);
-    if(*req_len <= 0) handle_error("failed to read clnt_sock");
-    if(*req_len < 5) return -2;// 500 没有'GET /'
-    if(req[0]!='G'||req[1]!='E'||req[2]!='T'||req[3]!=' '||req[4]!= '/') return -2;
-    ssize_t s1 = 3;
-    req[s1] = '.';
-    ssize_t s2 = 5;
-    int k = 0;
-    while((s2-s1)<= MAX_PATH_LEN && req[s2] != ' ')
-    {
-        if(req[s2] == '/')
-        {
-            if(req[s2-1] == '.' && req[s2-2] == '.' && req[s2-3] == '/') k--;
-            else k++;
-            if(k < 0) return -2;//跳出当前路径 500
-        }
-        s2++;
-    }
-    if(s2 - s1 > MAX_PATH_LEN) return -2;//路径超过最大路径长度
-    req[s2] = '\0';
-    int fd = open(req+s1,O_RDONLY);
-    if(fd < 0) return -1;//打开失败 404
-    if(stat(req+s1,fstatus) == -1) handle_error("failed to stat");
-    if(!S_ISREG(fstatus->st_mode)) return -2;//不是常规文件 500
-    return fd;
+int file_size (char *filename) {
+    struct stat statbuf;
+    stat (filename, &statbuf);
+    int size = statbuf.st_size;
+    return size;
 }
 
+void parse_request (char* request, ssize_t req_len, int i) {
+    char* req = request;
+    ssize_t s1 = 0;
+    while(s1 < req_len && req[s1] != ' ') s1++;
+    ssize_t s2 = s1 + 1;
+    while(s2 < req_len && req[s2] != ' ') s2++;
 
-void handle_clnt(int clnt_sock){
-    char *req_buf = (char *)malloc(MAX_RECV_LEN * sizeof(char));
-    if (req_buf == NULL)
-        handle_error("failed to malloc req_buf\n");
-    char *response = (char *)malloc(MAX_SEND_LEN * sizeof(char));
-    if (response == NULL)
-        handle_error("failed to malloc response\n");
-    
-    ssize_t req_len;
-    struct stat fstatus;
-    int file_fd = parse_request(clnt_sock, req_buf, &req_len, &fstatus);
-    
+    memcpy(path[i], req + s1 + 1, (s2 - s1 - 1) * sizeof(char));
+    path[i][s2 - s1 - 1] = '\0';
+    path_len[i] = (s2 - s1 - 1);
+}
+
+void handle_clnt_write (int clnt_sock, int i) {
     // 构造要返回的数据
+    // 这里没有去读取文件内容，而是以返回请求资源路径作为示例，并且永远返回 200
     // 注意，响应头部后需要有一个多余换行（\r\n\r\n），然后才是响应内容
-    if (file_fd == -1)
-    {// 404
-        sprintf(response, "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n", HTTP_STATUS_404, (size_t)0);
+    char* response = (char*) malloc(MAX_SEND_LEN * sizeof(char)) ;
+    int len = strlen (path[i]);
+    if (path[i][len - 1] == '/') {
+        //请求的资源为目录
+        sprintf(response, 
+            "HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n",
+            HTTP_STATUS_500, 0);
         size_t response_len = strlen(response);
-        if (write(clnt_sock, response, response_len) == -1)
-            handle_error("failed to write response when 404");
-    }
-    else if (file_fd == -2)
-    {// 500
-        sprintf(response, "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n", HTTP_STATUS_500, (size_t)0);
-        size_t response_len = strlen(response);
-        if (write(clnt_sock, response, response_len) == -1)
-            handle_error("failed to write response when 500");
-    }
-    else
-    {// 200
-        sprintf(response, "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n", HTTP_STATUS_200, (size_t)(fstatus.st_size));
-        size_t response_len = strlen(response);
-        if (write(clnt_sock, response, response_len) == -1)
-            handle_error("failed to write response when 200");
-        
-        //读取文件中的内容并返回
-        while (response_len = read(file_fd, response, MAX_SEND_LEN)){
-            if (response_len == -1)
-                handle_error("failed to read file");
-            if (write(clnt_sock, response, response_len) == -1)
-                handle_error("failed to write file to clnt_sock");
+        write(clnt_sock, response, response_len);
+    } else {
+        //不是目录，则看是否存在该文件
+        char relative_path[MAX_PATH_LEN] = ".";
+        strcat (relative_path, path[i]);
+        int fd = open (relative_path, O_RDONLY);
+        if (fd == -1) {
+            //不存在
+            sprintf(response, 
+                "HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n",
+                HTTP_STATUS_404, 0);
+            size_t response_len = strlen(response);
+            write(clnt_sock, response, response_len);
+        } else {
+            //该文件存在
+            //先获取文件长度
+            //再读取并发送
+            int content_len = file_size (relative_path);
+            sprintf(response, 
+                "HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n",
+                HTTP_STATUS_200, content_len);
+            size_t response_len = strlen(response);
+            write(clnt_sock, response, response_len);
+            //读取并发送文件内容
+            //int write_len = 0, read_len = 0;
+            //while (read_len < content_len) {
+                //int read_count = read (fd, response, MAX_SEND_LEN);
+
+				//write(clnt_sock, response, read_count);
+                //read_len += read_count;
+
+            //}
+			int read_count;
+			while((read_count = read (fd, response, MAX_SEND_LEN)) > 0) {
+				write(clnt_sock, response, read_count);
+			}
         }
-    }
-    // 关闭客户端套接字
-    // 释放内存
-    close(clnt_sock);
-    close(file_fd);
-    free(req_buf);
-    free(response);
+		close (fd);
+	}
+	close (clnt_sock);
+	free (response);
 }
 
-struct job
-{
-    int clnt_sock;
-    struct job *next;
-};
+static int create_and_bind (char *port) {
+ 	struct addrinfo hints;
+ 	struct addrinfo *result, *rp;
+ 	int s, serv_sock;
 
-struct threadpool
-{
-    int thread_num;                   //线程池中开启线程的个数
-    struct job *head;                 //指向job的头指针
-    struct job *tail;                 //指向job的尾指针
-    pthread_t *pthreads;              //线程池中所有线程的pthread_t
-    pthread_mutex_t mutex;            //互斥信号量
-    pthread_cond_t queue_empty;       //队列为空的条件变量
-    pthread_cond_t queue_not_empty;   //队列不为空的条件变量
-    int queue_cur_num;                //队列当前的job个数
-    int pool_close;                   //线程池是否已经关闭
-};
+  	memset (&hints, 0, sizeof (struct addrinfo));
+  	hints.ai_family = AF_UNSPEC;     /* Return IPv4 and IPv6 choices */
+  	hints.ai_socktype = SOCK_STREAM; /* We want a TCP socket */
+  	hints.ai_flags = AI_PASSIVE;     /* All interfaces */
 
-void* threadpool_function(void* arg)
-{
-    struct threadpool *pool = (struct threadpool*)arg;
-    struct job *pjob = NULL;
-    while (1)  //死循环
-    {
-        pthread_mutex_lock(&(pool->mutex));
-        while ((pool->queue_cur_num == 0) && !pool->pool_close)   //队列为空时，就等待队列非空
-            pthread_cond_wait(&(pool->queue_not_empty), &(pool->mutex));
-        if (pool->pool_close)   //线程池关闭，线程就退出
+  	s = getaddrinfo (NULL, port, &hints, &result);
+  	if (s != 0) {
+      	fprintf (stderr, "getaddrinfo: %s\n", gai_strerror (s));
+      	return -1;
+    }
+
+  	for (rp = result; rp != NULL; rp = rp->ai_next) {
+      	serv_sock = socket (rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+      	if (serv_sock == -1)
+        	continue;
+
+      	s = bind (serv_sock, rp->ai_addr, rp->ai_addrlen);
+      	if (s == 0)
         {
-            pthread_mutex_unlock(&(pool->mutex));
-            pthread_exit(NULL);
+			//bind成功
+          	break;
         }
-        pool->queue_cur_num--;
-        pjob = pool->head;
-        if (pool->queue_cur_num == 0)
-            pool->head = pool->tail = NULL;
-        else
-            pool->head = pjob->next;
-        if (pool->queue_cur_num == 0)
-            pthread_cond_signal(&(pool->queue_empty));        //队列为空，就可以通知threadpool_destroy函数，销毁线程函数
-        pthread_mutex_unlock(&(pool->mutex));
-        handle_clnt(pjob->clnt_sock);   //线程真正要做的工作，回调函数的调用
-        free(pjob);
-        pjob = NULL;
+
+      	close (serv_sock);
     }
+
+  	if (rp == NULL) {
+      	fprintf (stderr, "Could not bind\n");
+      	return -1;
+    }
+
+  	freeaddrinfo (result);
+  	return serv_sock;
 }
 
-struct threadpool* threadpool_init(int thread_num)
-{
-    struct threadpool *pool = NULL;
-    pool = malloc(sizeof(struct threadpool));
-    if (NULL == pool)
-        handle_error("failed to malloc threadpool");
-    pool->thread_num = thread_num;
-    pool->queue_cur_num = 0;
-    pool->head = NULL;
-    pool->tail = NULL;
-    if (pthread_mutex_init(&(pool->mutex), NULL))
-        handle_error("failed to init mutex");
-    if (pthread_cond_init(&(pool->queue_empty), NULL))
-        handle_error("failed to init queue_empty");
-    if (pthread_cond_init(&(pool->queue_not_empty), NULL))
-        handle_error("failed to init queue_not_empty");
-    pool->pthreads = malloc(sizeof(pthread_t) * thread_num);
-    if (NULL == pool->pthreads)
-        handle_error("failed to malloc pthreads");
-    pool->pool_close = 0;
-    for (int i = 0; i < pool->thread_num; i++)
-    {
-        pthread_create(&(pool->pthreads[i]), NULL, threadpool_function, (void *)pool);
+static int make_socket_non_blocking (int serv_sock) {
+  	int flags, s;
+
+  	if ((flags = fcntl (serv_sock, F_GETFL, 0)) == -1) {
+      	perror ("fcntl");
+      	return -1;
     }
-    return pool;
+
+  	flags |= O_NONBLOCK;
+  	if ((s = fcntl (serv_sock, F_SETFL, flags)) == -1) {
+      	perror ("fcntl");
+      	return -1;
+    }
+  	return 0;
 }
 
-int threadpool_add_job(struct threadpool* pool, int clnt_sock)
-{
-    pthread_mutex_lock(&(pool->mutex));
-    if (pool->pool_close)    //线程池关闭就退出
-    {
-        pthread_mutex_unlock(&(pool->mutex));
-        return -1;
-    }
-    struct job *pjob =(struct job*) malloc(sizeof(struct job));
-    if (NULL == pjob)
-    {
-        pthread_mutex_unlock(&(pool->mutex));
-        return -1;
-    }
-    pjob->clnt_sock = clnt_sock;
-    pjob->next = NULL;
-    if (pool->head == NULL)
-    {
-        pool->head = pool->tail = pjob;
-        pthread_cond_broadcast(&(pool->queue_not_empty));  //队列空的时候，有任务来时就通知线程池中的线程：队列非空
-    }
-    else
-    {
-        pool->tail->next = pjob;
-        pool->tail = pjob;
-    }
-    pool->queue_cur_num++;
-    pthread_mutex_unlock(&(pool->mutex));
-    return 0;
-}
+int main () {
+	signal(SIGPIPE, SIG_IGN);
+	int serv_sock, s;
+	int efd;
+  	struct epoll_event event;
+  	struct epoll_event *events;
 
+  	if ((serv_sock = create_and_bind ("8000")) == -1) {
+		perror("socker: ");
+	  	exit(EXIT_FAILURE);
+ 	}
 
-int threadpool_destroy(struct threadpool *pool)
-{
-    pthread_mutex_lock(&(pool->mutex));
-    if (pool->pool_close)   //线程池已经退出了，就直接返回
-    {
-        pthread_mutex_unlock(&(pool->mutex));
-        return -1;
-    }
-    
-    while (pool->queue_cur_num != 0)
-    {
-        pthread_cond_wait(&(pool->queue_empty), &(pool->mutex));  //等待队列为空
-    }
-    
-    pool->pool_close = 1;      //置线程池关闭标志
-    pthread_mutex_unlock(&(pool->mutex));
-    pthread_cond_broadcast(&(pool->queue_not_empty));  //唤醒线程池中正在阻塞的线程
-    for (int i = 0; i < pool->thread_num; ++i)
-    {
-        pthread_join(pool->pthreads[i], NULL);    //等待线程池的所有线程执行完毕
-    }
-    
-    pthread_mutex_destroy(&(pool->mutex));          //清理资源
-    pthread_cond_destroy(&(pool->queue_empty));
-    pthread_cond_destroy(&(pool->queue_not_empty));
-    free(pool->pthreads);
-    struct job *p;
-    while (pool->head != NULL)
-    {
-        p = pool->head;
-        pool->head = p->next;
-        free(p);
-    }
-    free(pool);
-    return 0;
-}
+  	if ((s = make_socket_non_blocking (serv_sock)) == -1) {
+		perror ("make_non_blocking: ");
+	  	exit(EXIT_FAILURE);
+  	}
 
+  	if((s = listen (serv_sock, SOMAXCONN)) == -1) {
+      	perror ("listen");
+	  	exit(EXIT_FAILURE);
+    }
 
+  	if((efd = epoll_create1 (0)) == -1) {
+      	perror ("epoll_create");
+	  	exit(EXIT_FAILURE);
+    }
 
-int main(){
-    // 创建套接字，参数说明：
-    //   AF_INET: 使用 IPv4
-    //   SOCK_STREAM: 面向连接的数据传输方式
-    //   IPPROTO_TCP: 使用 TCP 协议
-    int serv_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (serv_sock == -1)
-        handle_error("socket failed");
-    
-    // 将套接字和指定的 IP、端口绑定
-    //   用 0 填充 serv_addr （它是一个 sockaddr_in 结构体）
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    
-    //   设置 IPv4
-    //   设置 IP 地址
-    //   设置端口
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr(BIND_IP_ADDR);
-    serv_addr.sin_port = htons(BIND_PORT);
-    //   绑定
-    if (bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))==-1)
-        handle_error("failed to bind");
-    
-    // 使得 serv_sock 套接字进入监听状态，开始等待客户端发起请求
-    if (listen(serv_sock, SOMAXCONN)==-1)
-        handle_error("failed to listen");
-    
-    // 接收客户端请求，获得一个可以与客户端通信的新的生成的套接字 clnt_sock
-    struct sockaddr_in clnt_addr;
-    socklen_t clnt_size = sizeof(clnt_addr);
-    
-    //创建线程池
-    struct threadpool *pool = threadpool_init(20);
-    
-    while (1) {
-        // 当没有客户端连接时， accept() 会阻塞程序执行，直到有客户端连接进来
-        int clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_size);
-        // 处理客户端的请求
-        if (clnt_sock != -1){
-            threadpool_add_job(pool, clnt_sock);
+  	event.data.fd = serv_sock;
+  	event.events = EPOLLIN | EPOLLET;
+  	s = epoll_ctl (efd, EPOLL_CTL_ADD, serv_sock, &event);
+  	if (s == -1) {
+      	perror ("epoll_ctl");
+		exit (EXIT_FAILURE);
+    }
+
+  	events = calloc (MAXEVENTS, sizeof (event));
+
+  	while (1) {
+      	int n, i;
+      	n = epoll_wait (efd, events, MAXEVENTS, -1);
+      	for (i = 0; i < n; i++) {
+	  		if ((events[i].events & EPOLLERR) ||
+              	(events[i].events & EPOLLHUP) ||
+              	(!(events[i].events & EPOLLIN))) {
+				//出错了
+	      		fprintf (stderr, "epoll error\n");
+	      		close (events[i].data.fd);
+	      		continue;
+	    	} else if (serv_sock == events[i].data.fd) {
+				//有新的连接（一个或者多个）
+              	while (1) {
+                  	struct sockaddr in_addr;
+                  	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+                  	socklen_t in_len = sizeof (in_addr);
+                  	int infd = accept (serv_sock, &in_addr, &in_len);
+                  	if (infd == -1) {
+                      	if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+							//已经处理完所有连接
+                          	break;
+                        } else {
+                          	perror ("accept");
+                          	break;
+                        }
+                    }
+
+					//设置为非阻塞并加入监控列表
+					if((s = make_socket_non_blocking (infd)) == -1) {
+						perror ("make_non_blocking: ");
+						exit (EXIT_FAILURE);
+					}
+
+                  	event.data.fd = infd;
+                  	event.events = EPOLLIN | EPOLLET;
+                  	s = epoll_ctl (efd, EPOLL_CTL_ADD, infd, &event);
+                  	if (s == -1) {
+                      	perror ("epoll_ctl");
+                      	exit (EXIT_FAILURE);
+                    }
+                }
+             	continue;
+            } else {
+				// 必须一次全部读完
+              	int done = 0;
+                char req_buf[MAX_RECV_LEN];
+				ssize_t req_len = 0;
+				//读请求
+              	while (1) {
+                  	ssize_t count;
+
+                  	count = read (events[i].data.fd, req_buf, sizeof (req_buf));
+                  	if (count == -1) {
+                      	if (errno != EAGAIN) {
+							//读完了所有数据
+                          	perror ("read");
+                          	done = 1;
+                        }
+                      	break;
+                    } else if (count == 0) {
+                      	done = 1;
+                      	break;
+                    }
+					req_len += count;
+				}
+				parse_request(req_buf, req_len, i);
+				
+				//回应请求
+				handle_clnt_write (events[i].data.fd, i);
+				
+              	if (done) {
+                  	//printf ("Closed connection on descriptor %d\n",
+                    //      	events[i].data.fd);
+                  	close (events[i].data.fd);
+				  	epoll_ctl (efd, EPOLL_CTL_DEL, events[i].data.fd, &event);
+                }
             }
         }
-    
-    // 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动 break
-    // 关闭套接字
-    // 销毁线程池
-    close(serv_sock);
-    threadpool_destroy(pool);
-    return 0;
+    }
+
+  free (events);
+  close (serv_sock);
+  return 0;
 }

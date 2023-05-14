@@ -155,16 +155,13 @@ void handle_clnt(Connection *connect, int epoll_fd, int client_socket) {
 		// 		}
 		// 	}
 		// }
-
-		// 关闭客户端socket
-		close(client_socket);
-		// connect->response.status = 200;
-		// connect->response.fd	 = -1;
-		// epoll_read(connect, epoll_fd);
-		// 释放内存
-		free(connect);
-		free(response);
+		// 关闭文件描述符
+		close(connect->response.fd);
 	}
+	// 关闭客户端socket
+	close(client_socket);
+	free(connect);
+	free(response);
 }
 
 // void epoll_register(int epoll_fd, int fd, int state) {
@@ -235,26 +232,28 @@ int main() {
 	server_addr.sin_port		= htons(BIND_PORT);
 	//   绑定
 	bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr));
-
+	if (make_socket_non_blocking(server_socket) == -1) {
+		Error("Set non blocking failed");
+	};
 	// 使得 server_socket 套接字进入监听状态，开始等待客户端发起请求
 	listen(server_socket, MAX_CONN);
 	//
-	make_socket_non_blocking(server_socket);
 
 	/*
 	  参考https://github.com/zhenbianshu/tinyServer/blob/master/server.c
 	*/
 	/* 创建epoll */
-	int epoll_fd = epoll_create(FD_SIZE);
+	int epoll_fd = epoll_create1(0);
 	if (epoll_fd == -1) { Error("create epoll failed"); }
 	/*
 	  定义事件组
 	  注册socketEPOLL事件为ET(垂直触发)模式
 	*/
-	struct epoll_event events[MAX_EVENTS];
-	struct epoll_event event;
+	struct epoll_event *events;
+	struct epoll_event	event;
 	event.events  = EPOLLIN | EPOLLET;
 	event.data.fd = server_socket;
+	events		  = calloc(MAX_EVENTS, sizeof(event));
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_socket, &event) == -1) {
 		Error("Register epoll failed");
 	};
@@ -263,7 +262,10 @@ int main() {
 		event_num = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
 		if (event_num == -1) { Error("Wait epoll failed"); }
 		for (int i = 0; i < event_num; i++) {
-			if (events[i].events == EPOLLERR) { // 连接出错
+			if ((events[i].events == EPOLLERR) ||
+				(events[i].events == EPOLLHUP)) { // 连接出错
+				fprintf(stderr, "epoll error\n");
+				close(events[i].data.fd);
 				continue;
 			}
 			if (events[i].data.fd == server_socket) { // 有新的连接
@@ -274,19 +276,20 @@ int main() {
 						accept(server_socket, (struct sockaddr *)&client_addr,
 							   &client_addr_size);
 					if (client_socket == -1) {
-						if (errno = EAGAIN) { break; }
-						Error("Accept failed");
+						if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+							break;
+						} else
+							Error("Accept failed");
 					}
 					if (make_socket_non_blocking(client_socket) == -1) {
 						Error("Set non blocking failed");
 					}
 					Connection *connect =
 						(Connection *)malloc(sizeof(Connection));
-					connect->fd			   = client_socket;
-					connect->response.pos  = 0;
-					connect->response.size = 0;
-					event.data.ptr		   = (void *)connect;
-					event.events		   = EPOLLIN | EPOLLET;
+					connect->fd	   = client_socket;
+					event.data.ptr = (void *)connect;
+					event.data.fd  = client_socket;
+					event.events   = EPOLLIN | EPOLLET;
 					if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_socket,
 								  &event) == -1) {
 						Error("Register epoll failed");
