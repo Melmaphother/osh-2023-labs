@@ -2,13 +2,13 @@
 #include <fcntl.h>
 #include <math.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <signal.h>
 
 #define BIND_IP_ADDR "127.0.0.1"
 #define BIND_PORT 8000
@@ -17,7 +17,7 @@
 #define MAX_PATH_LEN 1024
 #define MAX_HOST_LEN 1024
 #define MAX_CONN 20
-#define MAX_THREAD 50
+#define MAX_THREAD 200
 #define MAX_QUEUE_SIZE 1024
 
 #define HTTP_STATUS_200 "200 OK"

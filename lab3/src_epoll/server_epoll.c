@@ -18,6 +18,7 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket) {
 	*/
 	char   *buf		= (char *)malloc(MAX_RECV_LEN * sizeof(char));
 	ssize_t buf_len = 0;
+	int		flag	= 1;
 	while (1) {
 		/*
 		  这里只能read最多MAX_RECV_LEN - *req_len - 1位
@@ -28,6 +29,13 @@ int parse_request(Connection *connect, int epoll_fd, int client_socket) {
 		buf[buf_len] = '\0'; // 最后一位清零保证之后strcat有效
 		strcat(req, buf);
 		req_len = strlen(req); // 更新req的长度
+		if (flag == 1) {
+			if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' &&
+				req[3] != ' ' && req[4] != '/') {
+				break; // 开头不是'GET /'
+			}
+			flag = 0;
+		}
 		if (buf[buf_len - 4] == '\r' && buf[buf_len - 3] == '\n' &&
 			buf[buf_len - 2] == '\r' && buf[buf_len - 1] == '\n') {
 			break; // 读到"\r\n\r\n"停止读取
@@ -256,8 +264,8 @@ int main() {
 		event_num = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
 		if (event_num == -1) { Error("Wait epoll failed"); }
 		for (int i = 0; i < event_num; i++) {
-			if ((events[i].events == EPOLLERR) ||
-				(events[i].events == EPOLLHUP)) { // 连接出错
+			if ((events[i].events & EPOLLERR) ||
+				(events[i].events & EPOLLHUP)) { // 连接出错
 				fprintf(stderr, "epoll error\n");
 				close(events[i].data.fd);
 				continue;
@@ -288,11 +296,11 @@ int main() {
 						Error("Register epoll failed");
 					};
 				}
-			} else if (events[i].events == EPOLLIN) { // 文件描述符可读
+			} else if (events[i].events & EPOLLIN) { // 文件描述符可读
 				Connection *connect		  = (Connection *)events[i].data.ptr;
 				int			client_socket = connect->fd;
 				parse_request(connect, epoll_fd, client_socket);
-			} else if (events[i].events == EPOLLOUT) { // 文件描述符可写
+			} else if (events[i].events & EPOLLOUT) { // 文件描述符可写
 				Connection *connect		  = (Connection *)events[i].data.ptr;
 				int			client_socket = connect->fd;
 				handle_clnt(connect, epoll_fd, client_socket);

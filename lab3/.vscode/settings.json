@@ -1,8 +1,0 @@
-{
-"editor.suggest.snippetsPreventQuickSuggestions": false,
-"files.associations": {
-    "new": "cpp",
-    "socket.h": "c"
-},
-"aiXcoder.showTrayIcon": true
-}

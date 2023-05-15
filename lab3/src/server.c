@@ -22,6 +22,8 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 		buf[buf_len] = '\0'; // 最后一位清零保证之后strcat有效
 		strcat(req, buf);
 		*req_len = strlen(req); // 更新req的长度
+		// for (int i = 0; i < *req_len; i++) { printf("%c", req[i]); }
+		// printf("\n");
 		if (flag == 1) {
 			if (req[0] != 'G' && req[1] != 'E' && req[2] != 'T' &&
 				req[3] != ' ' && req[4] != '/') {
@@ -60,7 +62,6 @@ int parse_request(int client_socket, ssize_t *req_len, char *req,
 				} else {
 					floor++;
 				}
-				printf("%d\n", floor);
 				if (floor < 0) { return -2; } // 已经在当前路径的上级
 			}
 			end++;
@@ -139,7 +140,7 @@ void handle_clnt(int client_socket) {
 }
 
 int main() {
-    signal(SIGPIPE, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
 	// 创建套接字，参数说明：
 	//   AF_INET: 使用 IPv4
 	//   SOCK_STREAM: 面向连接的数据传输方式
