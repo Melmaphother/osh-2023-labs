@@ -58,7 +58,6 @@
 
 ---
 
-
 ### 实验原理
 
 - 服务器具体实现
@@ -194,22 +193,22 @@
     
     ```c
         ssize_t begin = 3;
-        req[begin]	  = '.'; // 构造相对路径最开始的'.'
-    	ssize_t end	  = 5;
-    	int		floor = 0; // 文件夹层级
+        req[begin]      = '.'; // 构造相对路径最开始的'.'
+        ssize_t end      = 5;
+        int        floor = 0; // 文件夹层级
         while (end - begin <= MAX_PATH_LEN &&
-    		req[end] != ' ') { // 找到第一个空格停止
-    		if (req[end] == '/') {
-    			if (req[end - 1] == '.' && req[end - 2] == '.' &&
-    				req[end - 3] == '/') {
-    				floor--; // 说明到了上级目录
-    			} else {
-    				floor++;
-    			}
-    			if (floor < 0) { return -2; } // 已经在当前路径的上级
-    		}
-    		end++;
-    	}
+            req[end] != ' ') { // 找到第一个空格停止
+            if (req[end] == '/') {
+                if (req[end - 1] == '.' && req[end - 2] == '.' &&
+                    req[end - 3] == '/') {
+                    floor--; // 说明到了上级目录
+                } else {
+                    floor++;
+                }
+                if (floor < 0) { return -2; } // 已经在当前路径的上级
+            }
+            end++;
+        }
     ```
     
     但是由于read的时候并没有读到`..`，所以这里在超出当前目录时不怎么管用。
